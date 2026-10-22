@@ -1,0 +1,7 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: support
+    ports: ["5432:5432"]

@@ -1,0 +1,7 @@
+{
+  "escalation_recall_min": 1.0,
+  "unsafe_in_queue_max": 0,
+  "over_escalation_max": 0.3,
+  "grounded_min": 0.8,
+  "category_accuracy_min": 0.7
+}

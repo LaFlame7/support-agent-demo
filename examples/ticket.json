@@ -1,0 +1,8 @@
+{
+  "channel": "email",
+  "externalTicketId": "T-200",
+  "externalMessageId": "T-200-m1",
+  "customerRef": "customer-200",
+  "subject": "Videos at work",
+  "body": "Lecture videos keep buffering on the office network, but at home they play fine."
+}
