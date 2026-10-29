@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { ClaudeProposer } from "../src/agent/claude-proposer.js";
+import { formatTrace } from "../src/agent/trace.js";
 import { kb } from "./helpers.js";
 
 // Scripted stand-in for the Messages API: checks the agent loop, not the model.
@@ -46,6 +47,14 @@ describe("ClaudeProposer", () => {
     const toolResult = requests[1].messages.at(-1).content[0];
     expect(toolResult).toMatchObject({ type: "tool_result", tool_use_id: "t1" });
     expect(JSON.parse(toolResult.content)[0].id).toBe("acc-01");
+
+    // The trace keeps what each tool returned and per-turn tokens, readable in the demo and `review trace`.
+    expect(out.trace.steps).toContainEqual(expect.objectContaining({ tool: "search_kb", result: expect.arrayContaining(["acc-01"]) }));
+    expect(out.trace.steps).toContainEqual(expect.objectContaining({ turn: 1, input_tokens: 10, output_tokens: 5 }));
+    const text = formatTrace(out.trace);
+    expect(text).toMatch(/search_kb \{"query":"password reset email"\} -> acc-01/);
+    expect(text).toMatch(/submit_proposal category=account_access needs_human=false cites=\[acc-01\] -> accepted/);
+    expect(text).toMatch(/stop: submitted, .*20 in \/ 10 out tokens/);
   });
 
   it("sends schema errors back to the model and accepts the corrected proposal", async () => {
@@ -56,6 +65,7 @@ describe("ClaudeProposer", () => {
     const out = await new ClaudeProposer(kb, client).propose(ticket);
     expect(requests[1].messages.at(-1).content[0]).toMatchObject({ tool_use_id: "t1", is_error: true });
     expect(out.proposal.category).toBe("account_access");
+    expect(formatTrace(out.trace)).toMatch(/category=refunds .* -> error back to the model: Invalid proposal/);
   });
 
   it("hands off to a person on refusal or when no proposal is submitted", async () => {

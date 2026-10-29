@@ -1,4 +1,6 @@
+import "../env.js";
 import { createProposer, proposerKind } from "../app.js";
+import { formatTrace } from "../agent/trace.js";
 import { FakeHelpdesk } from "../channel/channel.js";
 import { openDb } from "../db/db.js";
 import { addSeconds, config } from "../domain.js";
@@ -15,7 +17,8 @@ let now = new Date("2026-10-22T09:00:00Z");
 const clock = () => now;
 const db = await openDb();
 const channel = new FakeHelpdesk();
-const proposer = createProposer(proposerKind());
+const kind = proposerKind();
+const proposer = createProposer(kind);
 const step = (title: string) => console.log(`\n=== ${title}`);
 
 const ticket = (id: string, subject: string, body: string): InboundMessage => ({
@@ -40,7 +43,7 @@ const tickets = [
 step("1. Webhooks arrive (T-100 is delivered twice)");
 for (const t of [...tickets, tickets[0]!]) console.log(t.externalTicketId, (await ingestMessage(db, t, clock)).outcome);
 
-step(`2. Worker drafts replies (proposer: ${proposerKind()})`);
+step(`2. Worker drafts replies (proposer: ${kind})`);
 await tick({ db, proposer, channel, clock });
 const proposals = await db.query<{ id: number; ticket_id: number; status: string; category: string; risk_flags: string[] }>(
   "select id, ticket_id, status, category, risk_flags from proposals order by id",
@@ -56,6 +59,14 @@ const proposalFor = async (externalId: string) =>
 const loginDraft = await proposalFor("T-100");
 const refundDraft = await proposalFor("T-101");
 console.log(`Draft for T-100:\n${loginDraft.draft_reply}`);
+
+if (kind === "claude") {
+  step("2a. What the agent did for each ticket (the trace saved with every proposal)");
+  const traces = await db.query<{ external_id: string; trace: Record<string, unknown> }>(
+    "select t.external_id, p.trace from proposals p join tickets t on t.id = p.ticket_id order by p.id",
+  );
+  for (const t of traces) console.log(`${t.external_id}\n${formatTrace(t.trace)}`);
+}
 
 step("3. Nobody can approve anonymously, and escalated drafts can't be approved at all");
 for (const attempt of [

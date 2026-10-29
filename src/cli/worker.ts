@@ -1,3 +1,4 @@
+import "../env.js";
 import { createProposer, openAppDb, proposerKind } from "../app.js";
 import { FakeHelpdesk } from "../channel/channel.js";
 import { systemClock } from "../domain.js";

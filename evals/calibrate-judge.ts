@@ -1,3 +1,4 @@
+import "../src/env.js";
 import { KnowledgeBase } from "../src/agent/kb.js";
 import { ClaudeJudge, HeuristicJudge, type Judge } from "./judges.js";
 import { arg, fmt, mapLimit, ratio, readJsonl, writeReport } from "./lib.js";

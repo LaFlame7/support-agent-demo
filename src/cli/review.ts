@@ -1,5 +1,7 @@
+import "../env.js";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import { formatTrace } from "../agent/trace.js";
 import { openAppDb } from "../app.js";
 import { systemClock } from "../domain.js";
 import { ApprovalError, approve, reject } from "../services/approvals.js";
@@ -10,6 +12,7 @@ import { ingestMessage, type InboundMessage } from "../services/ingest.js";
 //   npm run review -- queue
 //   npm run review -- approve 3 --as "Olena" [--reply "edited text"]
 //   npm run review -- reject 3 --as "Olena" --note "wrong article"
+//   npm run review -- trace 3
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: { as: { type: "string" }, reply: { type: "string" }, note: { type: "string" } },
@@ -40,8 +43,22 @@ try {
       await reject(db, { proposalId: Number(arg), approver: values.as ?? "", note: values.note }, systemClock);
       console.log("rejected");
       break;
+    case "trace": {
+      const [p] = await db.query<{ status: string; category: string; model: string; prompt_version: string; trace: Record<string, unknown> }>(
+        "select status, category, model, prompt_version, trace from proposals where id = $1",
+        [Number(arg)],
+      );
+      if (!p) {
+        console.error(`no proposal ${arg}`);
+        process.exitCode = 1;
+        break;
+      }
+      console.log(`proposal ${arg}: ${p.status}, ${p.category}, ${p.model}, prompt ${p.prompt_version}`);
+      console.log(formatTrace(p.trace));
+      break;
+    }
     default:
-      console.log("usage: review <ingest file.json | queue | approve id --as name | reject id --as name>");
+      console.log("usage: review <ingest file.json | queue | approve id --as name | reject id --as name | trace id>");
   }
 } catch (err) {
   if (!(err instanceof ApprovalError)) throw err;

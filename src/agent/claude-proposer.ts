@@ -87,6 +87,7 @@ export class ClaudeProposer implements Proposer {
       finish({ category: "other", reply: "", cited_kb_ids: [], needs_human: true, needs_human_reason: reason }, reason);
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
+      const started = Date.now();
       const res = await this.client.beta.messages.create({
         model: this.model,
         max_tokens: 8000,
@@ -101,7 +102,14 @@ export class ClaudeProposer implements Proposer {
       });
       usage.input_tokens += res.usage.input_tokens;
       usage.output_tokens += res.usage.output_tokens;
-      steps.push({ turn, stop_reason: res.stop_reason, served_by: res.model });
+      steps.push({
+        turn,
+        stop_reason: res.stop_reason,
+        served_by: res.model,
+        ms: Date.now() - started,
+        input_tokens: res.usage.input_tokens,
+        output_tokens: res.usage.output_tokens,
+      });
 
       if (res.stop_reason === "refusal") return handOff("model declined the request");
       if (res.stop_reason === "max_tokens") return handOff("model ran out of output tokens");
@@ -112,26 +120,32 @@ export class ClaudeProposer implements Proposer {
 
       const results: BetaToolResultBlockParam[] = [];
       for (const call of calls) {
-        steps.push({ tool: call.name, input: call.input });
+        // What the tool returned goes into the trace too, so a bad draft can be traced to a bad search.
+        const step: Record<string, unknown> = { tool: call.name, input: call.input };
+        steps.push(step);
         if (call.name === "submit_proposal") {
           const parsed = AgentProposal.safeParse(call.input);
-          if (parsed.success) return finish(parsed.data, "submitted");
-          results.push(toolError(call.id, `Invalid proposal: ${parsed.error.message}`));
+          if (parsed.success) {
+            step.result = "accepted";
+            return finish(parsed.data, "submitted");
+          }
+          results.push(toolError(step, call.id, `Invalid proposal: ${parsed.error.message}`));
         } else if (call.name === "search_kb") {
           const input = SearchInput.safeParse(call.input);
           if (!input.success) {
-            results.push(toolError(call.id, "query must be a non-empty string"));
+            results.push(toolError(step, call.id, "query must be a non-empty string"));
             continue;
           }
           const hits = this.kb.search(input.data.query);
           for (const h of hits) retrieved.add(h.id);
+          step.result = hits.map((h) => h.id);
           results.push({
             type: "tool_result",
             tool_use_id: call.id,
             content: JSON.stringify(hits.map((h) => ({ id: h.id, title: h.title, text: h.body }))),
           });
         } else {
-          results.push(toolError(call.id, `Unknown tool ${call.name}`));
+          results.push(toolError(step, call.id, `Unknown tool ${call.name}`));
         }
       }
       messages.push({ role: "user", content: results });
@@ -140,9 +154,7 @@ export class ClaudeProposer implements Proposer {
   }
 }
 
-const toolError = (id: string, content: string): BetaToolResultBlockParam => ({
-  type: "tool_result",
-  tool_use_id: id,
-  is_error: true,
-  content,
-});
+function toolError(step: Record<string, unknown>, id: string, content: string): BetaToolResultBlockParam {
+  step.result = { error: content };
+  return { type: "tool_result", tool_use_id: id, is_error: true, content };
+}

@@ -1,3 +1,4 @@
+import "../src/env.js";
 import { readFileSync } from "node:fs";
 import { createProposer, proposerKind } from "../src/app.js";
 import { applyPolicy, checkReplyText } from "../src/agent/policy.js";

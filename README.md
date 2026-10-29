@@ -21,14 +21,16 @@ npm run eval              # golden set through the same gates CI uses
 npm run judge:calibrate   # judge vs human labels
 ```
 
-No API key needed: by default drafts come from a keyword baseline (`RuleProposer`). To use Claude:
+No API key needed: by default drafts come from a keyword baseline (`RuleProposer`). To use Claude, put the key in `.env` (see `.env.example`) or export it:
 
 ```bash
 export ANTHROPIC_API_KEY=...
-PROPOSER=claude npm run demo
+PROPOSER=claude npm run demo               # also prints what the agent did for each ticket
 npm run eval -- --proposer claude          # 37 agent runs
 npm run judge:calibrate -- --judge claude  # 24 calls
 ```
+
+Every proposal stores a trace: each turn with stop reason, latency and tokens, each tool call with its input and what it returned. `npm run review -- trace <id>` prints it. A recorded run: [examples/claude-run.md](examples/claude-run.md).
 
 Two-terminal mode against a real Postgres (PGlite allows one process at a time):
 
@@ -38,6 +40,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:5432/support
 npm run review -- ingest examples/ticket.json
 npm run worker                       # leave running; kill it whenever you like
 npm run review -- queue
+npm run review -- trace 1
 npm run review -- approve 1 --as "Olena"
 ```
 
